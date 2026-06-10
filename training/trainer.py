@@ -18,8 +18,9 @@ sys.path.append(os.path.join(ROOT_DIR, 'agents'))   # ← points to MARL/agents/
 
 # ── Import YOUR actual agent files ────────────────────────────
 # These match the class names inside qmix_smart_grid.py and iql_smart_grid.py
-from qmix_smart_grid import QMIXAgent                       # class QMIXAgent
-from iql_smart_grid  import IQLAgent, IQLSmartGridSystem    # class IQLAgent, IQLSmartGridSystem
+from qmix_smart_grid  import QMIXAgent                      # class QMIXAgent
+from iql_smart_grid   import IQLAgent, IQLSmartGridSystem   # class IQLAgent, IQLSmartGridSystem
+from mappo_smart_grid import MAPPOSystem                     # class MAPPOSystem
 
 # ── Flip this to True when Aditi sends smart_grid_env.py ──────
 USE_REAL_ENV = False
@@ -144,8 +145,17 @@ class MARLTrainer:
             self.agent = None   # IQL uses self.iql_system instead
             print("✅ IQL system (5 independent agents) ready")
 
+        elif algorithm == 'mappo':
+            self.agent = MAPPOSystem(
+                num_agents       = num_agents,
+                state_dim        = state_dim,
+                action_dim       = action_dim,
+                global_state_dim = global_state_dim
+            )
+            print("✅ MAPPO system (5 actors + central critic) ready")
+
         else:
-            raise ValueError(f"Unknown algorithm '{algorithm}'. Use 'qmix' or 'iql'.")
+            raise ValueError(f"Unknown algorithm '{algorithm}'. Use 'qmix', 'iql', or 'mappo'.")
 
         self.episode_rewards = []
         self.episode_losses  = []
@@ -189,12 +199,15 @@ class MARLTrainer:
             episode_reward = 0.0
             episode_loss   = 0.0
             loss_count     = 0
+            global_states_traj = []   # MAPPO needs full episode trajectory
 
             for step in range(96):   # 96 steps = 24 hours
 
                 # ── Select actions ─────────────────────────────
                 if self.algorithm == 'qmix':
                     actions = self.agent.select_action(states, epsilon)
+                elif self.algorithm == 'mappo':
+                    actions = self.agent.select_actions(states)
                 else:
                     actions = self._iql_select_actions(states)
 
@@ -203,8 +216,6 @@ class MARLTrainer:
 
                 # ── Store + train ──────────────────────────────
                 if self.algorithm == 'qmix':
-                    # QMIX outputs one Q_tot scalar, so reward must be
-                    # a single float — not a list of 5 agent rewards.
                     scalar_reward = float(np.mean(rewards))
                     self.agent.store_experience(
                         states, actions, scalar_reward,
@@ -215,6 +226,10 @@ class MARLTrainer:
                     if loss and loss > 0:
                         episode_loss += loss
                         loss_count   += 1
+                elif self.algorithm == 'mappo':
+                    # MAPPO collects full episode then updates once at the end
+                    global_states_traj.append(global_state)
+                    self.agent.store_transitions(states, actions, rewards, done)
                 else:
                     self._iql_store_and_train(states, actions, rewards, next_states, done)
 
@@ -224,6 +239,12 @@ class MARLTrainer:
 
                 if done:
                     break
+
+            # ── MAPPO update — once per episode ────────────────
+            if self.algorithm == 'mappo' and len(global_states_traj) > 0:
+                actor_loss, critic_loss = self.agent.update(global_states_traj)
+                episode_loss = actor_loss
+                loss_count   = 1
 
             # ── End of episode ─────────────────────────────────
             epsilon = max(epsilon_end, epsilon * epsilon_decay)
@@ -290,7 +311,7 @@ class MARLTrainer:
 # ============================================================
 def run_comparison(num_episodes=300):
     results = {}
-    for algo in ['iql', 'qmix']:
+    for algo in ['iql', 'qmix', 'mappo']:
         print(f"\n{'='*50}  TRAINING {algo.upper()}  {'='*50}")
         trainer = MARLTrainer(algorithm=algo, num_episodes=num_episodes)
         rewards, _ = trainer.train()
@@ -298,17 +319,17 @@ def run_comparison(num_episodes=300):
         trainer.plot_reward_curve(save=True)
 
     plt.figure(figsize=(12, 5))
-    colors = {'iql': 'tomato', 'qmix': 'steelblue'}
+    colors = {'iql': 'tomato', 'qmix': 'steelblue', 'mappo': 'seagreen'}
     for algo, rewards in results.items():
         avg = [np.mean(rewards[max(0,i-20):i+1]) for i in range(len(rewards))]
         plt.plot(avg, color=colors[algo], linewidth=2, label=algo.upper())
-    plt.title('IQL vs QMIX — Reward Comparison')
+    plt.title('IQL vs QMIX vs MAPPO — Reward Comparison')
     plt.xlabel('Episode')
     plt.ylabel('Avg Reward (window=20)')
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig('results/comparison_iql_vs_qmix.png', dpi=150)
+    plt.savefig('results/comparison_all_algorithms.png', dpi=150)
     plt.show()
 
     print("\n" + "="*45)
@@ -329,9 +350,10 @@ if __name__ == "__main__":
     print("="*40)
     print("1. Train QMIX only")
     print("2. Train IQL only")
-    print("3. Compare IQL vs QMIX (Week 6)")
+    print("3. Train MAPPO only")
+    print("4. Compare all 3 — IQL vs QMIX vs MAPPO (Week 6)")
     print()
-    choice = input("Enter choice (1/2/3): ").strip()
+    choice = input("Enter choice (1/2/3/4): ").strip()
 
     if choice == '1':
         trainer = MARLTrainer(algorithm='qmix', num_episodes=300)
@@ -342,6 +364,10 @@ if __name__ == "__main__":
         trainer.train()
         trainer.plot_reward_curve()
     elif choice == '3':
+        trainer = MARLTrainer(algorithm='mappo', num_episodes=300)
+        trainer.train()
+        trainer.plot_reward_curve()
+    elif choice == '4':
         run_comparison(num_episodes=300)
     else:
         print("Running QMIX by default...")
