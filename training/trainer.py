@@ -27,6 +27,71 @@ USE_REAL_ENV = False
 
 
 # ============================================================
+# ADAPTER WRAPPER — bridges Aditi's env to your trainer
+# Aditi used standard Gymnasium format. Your trainer uses a
+# custom format. This wrapper converts between the two so
+# neither of you has to change your code.
+# ============================================================
+class SmartGridEnvWrapper:
+    """
+    Wraps Aditi's SmartGridEnv to match the format trainer expects.
+
+    Aditi's env returns:
+        reset() → (obs_dict, info)
+        step()  → (obs_dict, reward, terminated, truncated, info)
+
+    Trainer expects:
+        reset() → (states_list, global_state)
+        step()  → (next_states, rewards, done, next_global_state)
+    """
+
+    def __init__(self, env, num_agents=5):
+        self.env        = env
+        self.num_agents = num_agents
+
+    def _obs_dict_to_array(self, obs_dict):
+        """Convert Aditi's obs dict → flat numpy array shape (6,)"""
+        return np.array([
+            obs_dict['battery_soc'],
+            obs_dict['solar_output'],
+            obs_dict['wind_output'],
+            obs_dict['electricity_price'],
+            obs_dict['demand'],
+            obs_dict['time_step'] / 95.0    # normalise to [0,1]
+        ], dtype=np.float32)
+
+    def _to_trainer_format(self, obs_dict):
+        """Convert one obs dict → list of 5 identical arrays + global state"""
+        arr          = self._obs_dict_to_array(obs_dict)
+        states       = [arr.copy() for _ in range(self.num_agents)]
+        global_state = np.concatenate(states)   # shape (30,)
+        return states, global_state
+
+    def reset(self):
+        obs_dict, info       = self.env.reset()
+        states, global_state = self._to_trainer_format(obs_dict)
+        return states, global_state
+
+    def step(self, actions):
+        """
+        actions: list of 5 ints from trainer
+        Converts to Aditi's dict format, calls her step(), converts back.
+        """
+        agent_names = ['solar_agent', 'wind_agent', 'battery_agent',
+                       'grid_agent', 'load_agent']
+        action_dict = {name: int(actions[i])
+                       for i, name in enumerate(agent_names)}
+
+        obs_dict, reward, terminated, truncated, info = self.env.step(action_dict)
+
+        states, global_state = self._to_trainer_format(obs_dict)
+        done    = terminated or truncated
+        rewards = [float(reward)] * self.num_agents   # same reward for all agents
+
+        return states, rewards, done, global_state
+
+
+# ============================================================
 # DUMMY ENVIRONMENT
 # Runs without Aditi's file. Returns data in the exact same
 # format that SmartGridEnv will return — so your trainer works
@@ -117,9 +182,10 @@ class MARLTrainer:
 
         # ── Choose environment ─────────────────────────────────
         if USE_REAL_ENV:
-            from environment.smart_grid_env import SmartGridEnv
-            self.env = SmartGridEnv()
-            print("✅ Using Aditi's SmartGridEnv")
+            sys.path.append(os.path.join(ROOT_DIR, 'environment'))
+            from smart_grid_env import SmartGridEnv
+            self.env = SmartGridEnvWrapper(SmartGridEnv(), num_agents)
+            print("✅ Using Aditi's SmartGridEnv (wrapped)")
         else:
             self.env = DummySmartGridEnv(num_agents)
             print("⚠️  Using DummyEnv — flip USE_REAL_ENV=True when Aditi is ready")
