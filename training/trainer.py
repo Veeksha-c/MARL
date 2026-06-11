@@ -23,7 +23,7 @@ from iql_smart_grid   import IQLAgent, IQLSmartGridSystem   # class IQLAgent, IQ
 from mappo_smart_grid import MAPPOSystem                     # class MAPPOSystem
 
 # ── Flip this to True when Aditi sends smart_grid_env.py ──────
-USE_REAL_ENV = False
+USE_REAL_ENV = True
 
 
 # ============================================================
