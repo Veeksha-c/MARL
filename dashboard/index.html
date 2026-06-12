@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Grid MARL Dashboard — Mysuru</title>
+<style>
+  :root {
+    --bg: #0b1220;
+    --panel: #131c2e;
+    --panel-light: #1a2740;
+    --border: #243250;
+    --accent: #4fd1c5;
+    --accent-2: #fbbf24;
+    --green: #34d399;
+    --red: #f87171;
+    --text: #e5e9f0;
+    --muted: #8b97ab;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(135deg, #0b1220 0%, #111b30 100%);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 24px;
+  }
+
+  .container { max-width: 1200px; margin: 0 auto; }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  header h1 {
+    font-size: 26px;
+    font-weight: 700;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  header .subtitle { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--panel-light);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+  .dot.offline { background: var(--red); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 880px) { .grid { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+  }
+
+  .panel h2 {
+    font-size: 15px;
+    color: var(--accent);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  /* ── Inputs panel ───────────────────────────── */
+  .input-row {
+    margin-bottom: 18px;
+  }
+  .input-row label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .input-row label .value {
+    color: var(--text);
+    font-weight: 600;
+    font-family: 'Consolas', monospace;
+  }
+  input[type=range] {
+    width: 100%;
+    height: 6px;
+    border-radius: 4px;
+    background: var(--border);
+    outline: none;
+    -webkit-appearance: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: 3px solid var(--bg);
+  }
+
+  .live-badge {
+    font-size: 10px;
+    background: rgba(79, 209, 197, 0.15);
+    color: var(--accent);
+    border: 1px solid rgba(79, 209, 197, 0.4);
+    padding: 1px 7px;
+    border-radius: 999px;
+    margin-left: 8px;
+  }
+
+  .btn {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(90deg, var(--accent), #38bdf8);
+    color: #08131a;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: transform 0.1s ease;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn:active { transform: translateY(0px); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .btn-secondary {
+    background: var(--panel-light);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  /* ── Time display ───────────────────────────── */
+  .time-display {
+    text-align: center;
+    font-size: 36px;
+    font-weight: 800;
+    font-family: 'Consolas', monospace;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .time-sub { text-align: center; color: var(--muted); font-size: 12px; margin-bottom: 16px; }
+
+  /* ── Agent cards ────────────────────────────── */
+  .agents-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-top: 8px;
+  }
+  .agent-card {
+    background: var(--panel-light);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .agent-card .agent-name {
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+  }
+  .agent-card .agent-action {
+    font-size: 20px;
+    font-weight: 800;
+    margin-bottom: 8px;
+  }
+  .agent-card .confidence-bar {
+    height: 4px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .agent-card .confidence-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.6s ease;
+  }
+  .agent-card .confidence-label {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+  .agent-icon {
+    position: absolute;
+    top: 12px; right: 12px;
+    font-size: 22px;
+    opacity: 0.5;
+  }
+
+  /* Action colour coding */
+  .action-supply, .action-discharge, .action-sell  { color: var(--green); }
+  .action-store,  .action-charge,    .action-buy   { color: var(--accent-2); }
+  .action-idle,   .action-standby,   .action-normal,
+  .action-hold,   .action-curtail                  { color: var(--muted); }
+  .action-reduce, .action-shift,     .action-priority { color: #60a5fa; }
+
+  .conf-supply, .conf-discharge, .conf-sell  { background: var(--green); }
+  .conf-store,  .conf-charge,    .conf-buy   { background: var(--accent-2); }
+  .conf-idle,   .conf-standby,   .conf-normal,
+  .conf-hold,   .conf-curtail                { background: var(--muted); }
+  .conf-reduce, .conf-shift,     .conf-priority { background: #60a5fa; }
+
+  /* ── Savings panel ──────────────────────────── */
+  .savings-hero {
+    text-align: center;
+    padding: 24px 0;
+  }
+  .savings-hero .amount {
+    font-size: 48px;
+    font-weight: 800;
+    color: var(--green);
+    font-family: 'Consolas', monospace;
+  }
+  .savings-hero .label { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+  .savings-breakdown {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .savings-box {
+    background: var(--panel-light);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    text-align: center;
+  }
+  .savings-box .val { font-size: 20px; font-weight: 700; font-family: 'Consolas', monospace; }
+  .savings-box .lab { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  .explain-box {
+    background: var(--panel-light);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    margin-top: 16px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--muted);
+  }
+  .explain-box b { color: var(--text); }
+
+  .full-width { grid-column: 1 / -1; }
+
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 30px;
+    padding-bottom: 10px;
+  }
+
+  .loader {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-left: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div>
+      <h1>⚡ Smart Grid MARL Dashboard</h1>
+      <div class="subtitle">5-Agent MAPPO Decision System — Mysuru, Karnataka</div>
+    </div>
+    <div class="status-pill" id="backendStatus">
+      <span class="dot offline" id="statusDot"></span>
+      <span id="statusText">Connecting to model...</span>
+    </div>
+  </header>
+
+  <div class="grid">
+
+    <!-- ── LEFT: INPUTS ───────────────────────── -->
+    <div class="panel">
+      <h2>🌤️ Grid Inputs</h2>
+
+      <div class="time-display" id="timeDisplay">--:--</div>
+      <div class="time-sub" id="timeSub">Loading time of day...</div>
+
+      <div class="input-row">
+        <label>🔋 Battery State of Charge
+          <span class="value" id="batteryVal">0.50</span>
+        </label>
+        <input type="range" id="batterySlider" min="0" max="1" step="0.01" value="0.5">
+      </div>
+
+      <div class="input-row">
+        <label>☀️ Solar Output <span class="live-badge" id="solarLive">LIVE</span>
+          <span class="value" id="solarVal">0.00</span>
+        </label>
+        <input type="range" id="solarSlider" min="0" max="1" step="0.01" value="0">
+      </div>
+
+      <div class="input-row">
+        <label>💨 Wind Output <span class="live-badge" id="windLive">LIVE</span>
+          <span class="value" id="windVal">0.00</span>
+        </label>
+        <input type="range" id="windSlider" min="0" max="1" step="0.01" value="0">
+      </div>
+
+      <div class="input-row">
+        <label>💰 Electricity Price <span class="live-badge">IEX AVG</span>
+          <span class="value" id="priceVal">0.00</span>
+        </label>
+        <input type="range" id="priceSlider" min="0" max="1" step="0.01" value="0">
+      </div>
+
+      <div class="input-row">
+        <label>🏠 Demand <span class="live-badge">GRID-INDIA</span>
+          <span class="value" id="demandVal">0.00</span>
+        </label>
+        <input type="range" id="demandSlider" min="0" max="1" step="0.01" value="0">
+      </div>
+
+      <button class="btn" id="refreshBtn">🔄 Refresh Live Data (Mysuru)</button>
+      <button class="btn btn-secondary" id="predictBtn" style="margin-top:10px;">
+        🤖 Run Agent Prediction
+      </button>
+    </div>
+
+    <!-- ── RIGHT: SAVINGS ─────────────────────── -->
+    <div class="panel">
+      <h2>💸 Cost Savings Estimate</h2>
+
+      <div class="savings-hero">
+        <div class="amount" id="savingsAmount">₹ --</div>
+        <div class="label">saved this 15-min interval vs. naive grid-only system</div>
+      </div>
+
+      <div class="savings-breakdown">
+        <div class="savings-box">
+          <div class="val" id="baselineCost">₹ --</div>
+          <div class="lab">Baseline Cost</div>
+        </div>
+        <div class="savings-box">
+          <div class="val" id="optimizedCost">₹ --</div>
+          <div class="lab">Optimized Cost</div>
+        </div>
+      </div>
+
+      <div class="savings-box" style="margin-top:12px;">
+        <div class="val" id="savingsPercent">--%</div>
+        <div class="lab">Cost Reduction</div>
+      </div>
+
+      <div class="explain-box" id="explainBox">
+        Run a prediction to see the AI's reasoning here.
+      </div>
+    </div>
+
+    <!-- ── FULL WIDTH: AGENT DECISIONS ────────── -->
+    <div class="panel full-width">
+      <h2>🤖 Agent Decisions <span class="loader" id="predictLoader" style="display:none;"></span></h2>
+      <div class="agents-grid" id="agentsGrid">
+        <!-- Filled by JS -->
+      </div>
+    </div>
+
+  </div>
+
+  <footer>
+    Multi-Agent Reinforcement Learning for Smart Grid Energy Optimization · Trained on real Mysuru solar/wind/price/demand data · MAPPO Model
+  </footer>
+
+</div>
+
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+const BACKEND_URL = 'http://localhost:5000';
+const MYSURU_LAT  = 12.307;
+const MYSURU_LON  = 76.650;
+
+// Normalization constants (must match training!)
+const SOLAR_MAX_W   = 800.0;   // max PV power observed in training data (W)
+const WIND_MAX_MS   = 15.0;    // max wind speed used for normalization (m/s)
+
+const AGENT_ICONS = {
+  solar_agent:   '☀️',
+  wind_agent:    '💨',
+  battery_agent: '🔋',
+  grid_agent:    '🏭',
+  load_agent:    '🏠'
+};
+
+const AGENT_LABELS = {
+  solar_agent:   'Solar Agent',
+  wind_agent:    'Wind Agent',
+  battery_agent: 'Battery Agent',
+  grid_agent:    'Grid Agent',
+  load_agent:    'Load Agent'
+};
+
+// ============================================================
+// ELEMENTS
+// ============================================================
+const el = {
+  statusDot:  document.getElementById('statusDot'),
+  statusText: document.getElementById('statusText'),
+  timeDisplay: document.getElementById('timeDisplay'),
+  timeSub: document.getElementById('timeSub'),
+
+  batterySlider: document.getElementById('batterySlider'),
+  solarSlider:   document.getElementById('solarSlider'),
+  windSlider:    document.getElementById('windSlider'),
+  priceSlider:   document.getElementById('priceSlider'),
+  demandSlider:  document.getElementById('demandSlider'),
+
+  batteryVal: document.getElementById('batteryVal'),
+  solarVal:   document.getElementById('solarVal'),
+  windVal:    document.getElementById('windVal'),
+  priceVal:   document.getElementById('priceVal'),
+  demandVal:  document.getElementById('demandVal'),
+
+  refreshBtn: document.getElementById('refreshBtn'),
+  predictBtn: document.getElementById('predictBtn'),
+  predictLoader: document.getElementById('predictLoader'),
+
+  agentsGrid: document.getElementById('agentsGrid'),
+
+  savingsAmount: document.getElementById('savingsAmount'),
+  baselineCost: document.getElementById('baselineCost'),
+  optimizedCost: document.getElementById('optimizedCost'),
+  savingsPercent: document.getElementById('savingsPercent'),
+  explainBox: document.getElementById('explainBox'),
+};
+
+// ============================================================
+// SLIDER <-> LABEL SYNC
+// ============================================================
+function bindSlider(slider, label) {
+  slider.addEventListener('input', () => {
+    label.textContent = parseFloat(slider.value).toFixed(2);
+  });
+}
+bindSlider(el.batterySlider, el.batteryVal);
+bindSlider(el.solarSlider,   el.solarVal);
+bindSlider(el.windSlider,    el.windVal);
+bindSlider(el.priceSlider,   el.priceVal);
+bindSlider(el.demandSlider,  el.demandVal);
+
+// ============================================================
+// TIME OF DAY -> time_step (0-95)
+// ============================================================
+function getCurrentTimeStep() {
+  const now = new Date();
+  const hours = now.getHours();
+  const minutes = now.getMinutes();
+  const totalMinutes = hours * 60 + minutes;
+  const timeStep = Math.floor(totalMinutes / 15); // 0-95
+  return Math.min(95, Math.max(0, timeStep));
+}
+
+function updateTimeDisplay() {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  el.timeDisplay.textContent = `${hh}:${mm}`;
+  const ts = getCurrentTimeStep();
+  el.timeSub.textContent = `Time step ${ts} / 95 — Mysuru local time`;
+}
+
+// ============================================================
+// LIVE WEATHER — Open-Meteo (free, no API key)
+// ============================================================
+async function fetchLiveWeather() {
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${MYSURU_LAT}&longitude=${MYSURU_LON}` +
+              `&current=wind_speed_10m,direct_radiation,shortwave_radiation&timezone=Asia%2FKolkata`;
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Weather API error');
+    const data = await res.json();
+
+    const windSpeed   = data.current.wind_speed_10m ?? 0;        // m/s
+    const radiation   = data.current.shortwave_radiation ?? 0;   // W/m2
+
+    const windNorm  = Math.min(1, windSpeed / WIND_MAX_MS);
+    const solarNorm = Math.min(1, radiation / SOLAR_MAX_W);
+
+    el.windSlider.value  = windNorm.toFixed(2);
+    el.solarSlider.value = solarNorm.toFixed(2);
+    el.windVal.textContent  = windNorm.toFixed(2);
+    el.solarVal.textContent = solarNorm.toFixed(2);
+
+    el.solarLive.textContent = 'LIVE ✓';
+    el.windLive.textContent  = 'LIVE ✓';
+
+    return true;
+  } catch (err) {
+    console.warn('Live weather fetch failed:', err);
+    el.solarLive.textContent = 'OFFLINE';
+    el.windLive.textContent  = 'OFFLINE';
+    return false;
+  }
+}
+const el_extra = { solarLive: document.getElementById('solarLive'), windLive: document.getElementById('windLive') };
+Object.assign(el, el_extra);
+
+// ============================================================
+// PRICE + DEMAND LOOKUP from backend (real dataset, time-indexed)
+// ============================================================
+async function fetchPriceDemand(timeStep) {
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/lookup?time_step=${timeStep}`);
+    if (!res.ok) throw new Error('Lookup failed');
+    const data = await res.json();
+
+    el.priceSlider.value = data.electricity_price.toFixed(2);
+    el.demandSlider.value = data.demand.toFixed(2);
+    el.priceVal.textContent = data.electricity_price.toFixed(2);
+    el.demandVal.textContent = data.demand.toFixed(2);
+    return true;
+  } catch (err) {
+    console.warn('Price/demand lookup failed:', err);
+    return false;
+  }
+}
+
+// ============================================================
+// BACKEND HEALTH CHECK
+// ============================================================
+async function checkBackend() {
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/health`);
+    if (res.ok) {
+      el.statusDot.classList.remove('offline');
+      el.statusText.textContent = 'MAPPO model loaded';
+      return true;
+    }
+  } catch (err) {
+    el.statusDot.classList.add('offline');
+    el.statusText.textContent = 'Backend offline (run app.py)';
+  }
+  return false;
+}
+
+// ============================================================
+// REFRESH ALL LIVE DATA
+// ============================================================
+async function refreshAll() {
+  updateTimeDisplay();
+  el.refreshBtn.disabled = true;
+  el.refreshBtn.textContent = '🔄 Refreshing...';
+
+  await fetchLiveWeather();
+  await fetchPriceDemand(getCurrentTimeStep());
+
+  el.refreshBtn.disabled = false;
+  el.refreshBtn.textContent = '🔄 Refresh Live Data (Mysuru)';
+}
+
+// ============================================================
+// ACTION COLOUR CLASS HELPER
+// ============================================================
+function actionClass(meaning) {
+  return meaning.toLowerCase();
+}
+
+// ============================================================
+// RUN PREDICTION
+// ============================================================
+async function runPrediction() {
+  el.predictLoader.style.display = 'inline-block';
+  el.predictBtn.disabled = true;
+
+  const payload = {
+    battery_soc:       parseFloat(el.batterySlider.value),
+    solar_output:      parseFloat(el.solarSlider.value),
+    wind_output:       parseFloat(el.windSlider.value),
+    electricity_price: parseFloat(el.priceSlider.value),
+    demand:            parseFloat(el.demandSlider.value),
+    time_step:         getCurrentTimeStep()
+  };
+
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error('Prediction failed');
+    const data = await res.json();
+
+    renderAgents(data.agents);
+    renderSavings(data.savings, data.observation, data.agents);
+
+  } catch (err) {
+    console.error(err);
+    el.agentsGrid.innerHTML = `<div style="color:#f87171;">
+      ⚠️ Could not reach backend. Make sure <code>python dashboard/app.py</code> is running.
+    </div>`;
+  } finally {
+    el.predictLoader.style.display = 'none';
+    el.predictBtn.disabled = false;
+  }
+}
+
+// ============================================================
+// RENDER AGENT CARDS
+// ============================================================
+function renderAgents(agents) {
+  let html = '';
+
+  for (const [agentKey, info] of Object.entries(agents)) {
+    const meaning = info.meaning;
+    const cls = actionClass(meaning);
+    const confidencePct = (info.confidence * 100).toFixed(0);
+
+    html += `
+      <div class="agent-card">
+        <div class="agent-icon">${AGENT_ICONS[agentKey] || '🤖'}</div>
+        <div class="agent-name">${AGENT_LABELS[agentKey] || agentKey}</div>
+        <div class="agent-action action-${cls}">${meaning.toUpperCase()}</div>
+        <div class="confidence-bar">
+          <div class="confidence-fill conf-${cls}" style="width:${confidencePct}%"></div>
+        </div>
+        <div class="confidence-label">${confidencePct}% confidence</div>
+      </div>
+    `;
+  }
+
+  el.agentsGrid.innerHTML = html;
+}
+
+// ============================================================
+// RENDER SAVINGS + EXPLANATION
+// ============================================================
+function renderSavings(savings, obs, agents) {
+  el.savingsAmount.textContent = `₹ ${savings.savings_rs.toFixed(2)}`;
+  el.baselineCost.textContent  = `₹ ${savings.baseline_cost_rs.toFixed(2)}`;
+  el.optimizedCost.textContent = `₹ ${savings.optimized_cost_rs.toFixed(2)}`;
+  el.savingsPercent.textContent = `${savings.savings_percent.toFixed(1)}%`;
+
+  // Build a plain-English explanation
+  const hour = Math.floor(obs.time_step / 4);
+  const minute = (obs.time_step % 4) * 15;
+  const timeStr = `${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}`;
+
+  let explanation = `<b>At ${timeStr}</b> — Solar: ${(obs.solar_output*100).toFixed(0)}%, `;
+  explanation += `Wind: ${(obs.wind_output*100).toFixed(0)}%, `;
+  explanation += `Battery: ${(obs.battery_soc*100).toFixed(0)}%, `;
+  explanation += `Price: ${(obs.electricity_price*100).toFixed(0)}%, `;
+  explanation += `Demand: ${(obs.demand*100).toFixed(0)}%.<br><br>`;
+
+  const gridAction = agents.grid_agent.meaning;
+  const batteryAction = agents.battery_agent.meaning;
+  const solarAction = agents.solar_agent.meaning;
+  const windAction = agents.wind_agent.meaning;
+
+  if (gridAction === 'standby' || gridAction === 'idle') {
+    explanation += `The <b>Grid Agent</b> is avoiding grid purchase`;
+    if (obs.electricity_price > 0.7) explanation += `, since prices are currently <b>high</b>`;
+    explanation += `. `;
+  } else if (gridAction === 'buy') {
+    explanation += `The <b>Grid Agent</b> is buying from the grid`;
+    if (obs.electricity_price < 0.4) explanation += ` while prices are <b>low</b> — good timing`;
+    explanation += `. `;
+  }
+
+  if (solarAction === 'supply' || windAction === 'supply') {
+    explanation += `Renewable energy is being <b>actively supplied</b> to meet demand. `;
+  }
+
+  if (batteryAction === 'charge') {
+    explanation += `The <b>Battery</b> is charging`;
+    if (obs.electricity_price < 0.4) explanation += ` while electricity is cheap`;
+    explanation += `. `;
+  } else if (batteryAction === 'discharge') {
+    explanation += `The <b>Battery</b> is discharging to offset demand and reduce grid reliance. `;
+  }
+
+  if (savings.savings_rs > 0) {
+    explanation += `<br><br>This combination of decisions saves approximately <b>₹${savings.savings_rs.toFixed(2)}</b> compared to a naive grid-only system for this 15-minute interval.`;
+  }
+
+  el.explainBox.innerHTML = explanation;
+}
+
+// ============================================================
+// EVENT LISTENERS
+// ============================================================
+el.refreshBtn.addEventListener('click', refreshAll);
+el.predictBtn.addEventListener('click', runPrediction);
+
+// ============================================================
+// INIT
+// ============================================================
+(async function init() {
+  updateTimeDisplay();
+  setInterval(updateTimeDisplay, 30000); // update clock every 30s
+
+  await checkBackend();
+  await refreshAll();
+})();
+</script>
+</body>
+</html>

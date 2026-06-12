@@ -335,7 +335,31 @@ class MARLTrainer:
 
         print(f"\n✅ Training done. Best reward: {self.best_reward:.2f}")
         self._save_csv()
+        self._save_model()
         return self.episode_rewards, self.episode_losses
+
+
+    def _save_model(self):
+        """
+        Saves the trained model to results/models/ so it can be loaded
+        later by inference.py for predictions on new data.
+        """
+        models_dir = os.path.join(self.results_dir, 'models')
+        os.makedirs(models_dir, exist_ok=True)
+        prefix = os.path.join(models_dir, self.algorithm)
+
+        try:
+            if self.algorithm == 'mappo':
+                self.agent.save_models(prefix)
+            elif self.algorithm == 'qmix':
+                self.agent.save_models(prefix + '_model.pth')
+            elif self.algorithm == 'iql':
+                for i, agent in enumerate(self.iql_system.agents):
+                    torch.save(agent.q_network.state_dict(),
+                               f"{prefix}_agent_{i}.pth")
+                print(f"✅ IQL models saved → {prefix}_agent_*.pth")
+        except Exception as e:
+            print(f"⚠️  Could not save model: {e}")
 
 
     def _save_csv(self):

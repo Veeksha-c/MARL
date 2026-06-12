@@ -1,0 +1,7 @@
+git pull origin main
+
+# Make code changes
+
+git add .
+git commit -m "Implemented reward shaping"
+git push origin main

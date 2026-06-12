@@ -103,7 +103,7 @@ class QMIXMixingNetwork(nn.Module):  # Define mixing network class
 # Define the QMIX agent class that manages the entire system
 class QMIXAgent:  # Define main QMIX agent class
     def __init__(self, num_agents=5, state_dim=6, action_dim=4, global_state_dim=30,  # Initialize QMIX agent
-                 lr=0.001, gamma=0.99, buffer_size=10000, batch_size=32):  # Set hyperparameters
+                 lr=0.0003, gamma=0.99, buffer_size=10000, batch_size=32):  # Set hyperparameters - lr lowered from 0.001 to reduce divergence
         self.num_agents = num_agents  # Store number of agents
         self.state_dim = state_dim  # Store individual agent state dimension
         self.action_dim = action_dim  # Store action dimension
@@ -245,25 +245,33 @@ class QMIXAgent:  # Define main QMIX agent class
         with torch.no_grad():  # Disable gradient computation for target calculation
             # Get next total Q-value from target mixing network
             next_q_tot = self.target_mixing_network(next_q_values, next_global_states)  # Forward pass through target mixing
+            # FIX: squeeze to (batch_size,) to match rewards and dones shape
+            next_q_tot = next_q_tot.squeeze()  # Shape: (32,)
             # Calculate target total Q-value using Bellman equation
             target_q_tot = rewards + (1.0 - dones) * self.gamma * next_q_tot  # Bellman equation
-        
+
         # Calculate current total Q-value from mixing network
         current_q_tot = self.mixing_network(current_q_values, global_states)  # Forward pass through mixing network
-        
+        # FIX: squeeze current to match target shape (batch_size,)
+        current_q_tot = current_q_tot.squeeze()  # Shape: (32,)
+
         # Calculate loss (MSE between current and target total Q-values)
         mixer_loss = F.mse_loss(current_q_tot, target_q_tot)  # Calculate mixing network loss
-        
+
         # Backpropagate loss for mixing network
         self.mixer_optimizer.zero_grad()  # Reset gradients
         mixer_loss.backward()  # Backpropagate loss
+        # FIX: clip gradients to prevent Q-value divergence/explosion
+        torch.nn.utils.clip_grad_norm_(self.mixing_network.parameters(), max_norm=1.0)
+        for agent_net in self.agent_networks:
+            torch.nn.utils.clip_grad_norm_(agent_net.parameters(), max_norm=1.0)
         self.mixer_optimizer.step()  # Update mixing network weights
-        
+
         # Calculate individual agent losses (optional, for monitoring)
         agent_losses = []  # List to store individual agent losses
         for i in range(self.num_agents):  # Loop through agents
-            # Calculate individual agent loss
-            agent_loss = F.mse_loss(current_q_values[:, i], target_q_tot)  # Individual agent loss
+            # FIX: detach target before monitoring loss
+            agent_loss = F.mse_loss(current_q_values[:, i], target_q_tot.detach())  # Individual agent loss
             agent_losses.append(agent_loss.item())  # Add loss value to list
         
         # Return average loss for monitoring
