@@ -64,6 +64,30 @@
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
   .dot.offline { background: var(--red); }
 
+  .disclaimer {
+    background: rgba(251, 191, 36, 0.08);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    color: var(--accent-2);
+    font-size: 12px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    text-align: center;
+  }
+
+  .location-select {
+    background: var(--panel-light);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 13px;
+    cursor: pointer;
+    outline: none;
+    font-family: inherit;
+  }
+  .location-select:hover { border-color: var(--accent); }
+
   .grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -296,14 +320,28 @@
 <body>
 <div class="container">
 
+  <div class="disclaimer">
+    ⚠️ Research prototype for academic demonstration — not for real grid control or financial decisions.
+  </div>
+
   <header>
     <div>
       <h1>⚡ Smart Grid MARL Dashboard</h1>
-      <div class="subtitle">5-Agent MAPPO Decision System — Mysuru, Karnataka</div>
+      <div class="subtitle">5-Agent MAPPO Decision System · Trained on Mysuru, Karnataka data</div>
     </div>
-    <div class="status-pill" id="backendStatus">
-      <span class="dot offline" id="statusDot"></span>
-      <span id="statusText">Connecting to model...</span>
+    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+      <select id="locationSelect" class="location-select">
+        <option value="mysuru" data-lat="12.307" data-lon="76.650">📍 Mysuru, Karnataka</option>
+        <option value="raichur" data-lat="16.2076" data-lon="77.3463">📍 Raichur, Karnataka</option>
+        <option value="bangalore" data-lat="12.9716" data-lon="77.5946">📍 Bangalore, Karnataka</option>
+        <option value="chennai" data-lat="13.0827" data-lon="80.2707">📍 Chennai, Tamil Nadu</option>
+        <option value="delhi" data-lat="28.6139" data-lon="77.2090">📍 Delhi NCR</option>
+        <option value="jaisalmer" data-lat="26.9157" data-lon="70.9083">📍 Jaisalmer, Rajasthan</option>
+      </select>
+      <div class="status-pill" id="backendStatus">
+        <span class="dot offline" id="statusDot"></span>
+        <span id="statusText">Connecting to model...</span>
+      </div>
     </div>
   </header>
 
@@ -407,9 +445,18 @@
 // ============================================================
 // CONFIG
 // ============================================================
-const BACKEND_URL = 'http://localhost:5000';
-const MYSURU_LAT  = 12.307;
-const MYSURU_LON  = 76.650;
+// In production (deployed), the backend serves the HTML itself, so
+// API calls should go to the same origin. Locally, default to localhost:5000.
+const BACKEND_URL = window.location.origin.includes('localhost') ||
+                    window.location.origin.includes('127.0.0.1') ||
+                    window.location.protocol === 'file:'
+                    ? 'http://localhost:5000'
+                    : window.location.origin;
+
+// Default location (Mysuru) - updated dynamically via dropdown
+let CURRENT_LAT = 12.307;
+let CURRENT_LON = 76.650;
+let CURRENT_LOCATION_NAME = 'Mysuru, Karnataka';
 
 // Normalization constants (must match training!)
 const SOLAR_MAX_W   = 800.0;   // max PV power observed in training data (W)
@@ -435,6 +482,7 @@ const AGENT_LABELS = {
 // ELEMENTS
 // ============================================================
 const el = {
+  locationSelect: document.getElementById('locationSelect'),
   statusDot:  document.getElementById('statusDot'),
   statusText: document.getElementById('statusText'),
   timeDisplay: document.getElementById('timeDisplay'),
@@ -504,7 +552,7 @@ function updateTimeDisplay() {
 // LIVE WEATHER — Open-Meteo (free, no API key)
 // ============================================================
 async function fetchLiveWeather() {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${MYSURU_LAT}&longitude=${MYSURU_LON}` +
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${CURRENT_LAT}&longitude=${CURRENT_LON}` +
               `&current=wind_speed_10m,direct_radiation,shortwave_radiation&timezone=Asia%2FKolkata`;
 
   try {
@@ -677,7 +725,7 @@ function renderSavings(savings, obs, agents) {
   const minute = (obs.time_step % 4) * 15;
   const timeStr = `${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}`;
 
-  let explanation = `<b>At ${timeStr}</b> — Solar: ${(obs.solar_output*100).toFixed(0)}%, `;
+  let explanation = `<b>📍 ${CURRENT_LOCATION_NAME}</b> · <b>${timeStr}</b> — Solar: ${(obs.solar_output*100).toFixed(0)}%, `;
   explanation += `Wind: ${(obs.wind_output*100).toFixed(0)}%, `;
   explanation += `Battery: ${(obs.battery_soc*100).toFixed(0)}%, `;
   explanation += `Price: ${(obs.electricity_price*100).toFixed(0)}%, `;
@@ -714,8 +762,21 @@ function renderSavings(savings, obs, agents) {
     explanation += `<br><br>This combination of decisions saves approximately <b>₹${savings.savings_rs.toFixed(2)}</b> compared to a naive grid-only system for this 15-minute interval.`;
   }
 
+  explanation += `<br><br><span style="font-size:11px; opacity:0.7;">ℹ️ Solar & wind are live readings for ${CURRENT_LOCATION_NAME}. Price & demand use IEX/Grid-India reference patterns (not location-specific).</span>`;
+
   el.explainBox.innerHTML = explanation;
 }
+
+// ============================================================
+// LOCATION CHANGE HANDLER
+// ============================================================
+el.locationSelect.addEventListener('change', () => {
+  const opt = el.locationSelect.options[el.locationSelect.selectedIndex];
+  CURRENT_LAT = parseFloat(opt.dataset.lat);
+  CURRENT_LON = parseFloat(opt.dataset.lon);
+  CURRENT_LOCATION_NAME = opt.textContent.replace('📍', '').trim();
+  refreshAll();
+});
 
 // ============================================================
 // EVENT LISTENERS
